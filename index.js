@@ -2,13 +2,14 @@ const { DATABASE_SCHEMA, DATABASE_URL, SHOW_PG_MONITOR } = require('./config');
 const massive = require('massive');
 const monitor = require('pg-monitor');
 
+const { USADataRequest }= require('./services/api.js');
+
 // Call start
 (async () => {
     console.log('main.js: before start');
 
     const db = await massive({
         connectionString: DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
     }, {
         // Massive Configuration
         scripts: process.cwd() + '/migration',
@@ -65,17 +66,39 @@ const monitor = require('pg-monitor');
     try {
         await migrationUp();
 
-        //exemplo de insert
-        const result1 = await db[DATABASE_SCHEMA].api_data.insert({
-            doc_record: { 'a': 'b' },
-        })
-        console.log('result1 >>>', result1);
+        const data = await USADataRequest();
 
-        //exemplo select
-        const result2 = await db[DATABASE_SCHEMA].api_data.find({
+        // 1
+        await db[DATABASE_SCHEMA].api_data.insert({
+            doc_record: data,
+        });
+
+        // 2 - a
+        const result1 = data.data
+            .filter(x => x.Year >= 2018 && x.Year <= 2020)
+            .reduce((sum, item) => sum += item.Population, 0);
+            
+        console.log(`1) - Total USA population in 2018, 2019 and 2020 is ${result1}`);
+
+        // 2 - b
+        const result2 = await db[DATABASE_SCHEMA].api_data.findOne({
             is_active: true
         });
-        console.log('result2 >>>', result2);
+
+        const totalPopulation = result2.doc_record.data
+            .filter(x => x.Year >= 2018 && x.Year <= 2020)
+            .reduce((sum, item) => sum += item.Population, 0);
+
+        console.log(`2) - Total USA population in 2018, 2019 and 2020 is ${totalPopulation}`);
+
+        // 2 - c
+        const result3 = await db.query(`
+            SELECT SUM(cast(obj->>'Population' as integer)) total
+            FROM   flavio_fgjj.api_data r, jsonb_array_elements(r.doc_record#>'{data}') obj
+            WHERE  obj->>'Year' IN ('2018', '2019', '2020')
+        `);
+
+        console.log(`3) - Total USA population in 2018, 2019 and 2020 is ${result3[0].total}`);
 
     } catch (e) {
         console.log(e.message)
