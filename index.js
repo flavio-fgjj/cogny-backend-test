@@ -10,6 +10,9 @@ const { USADataRequest }= require('./services/api.js');
 
     const db = await massive({
         connectionString: DATABASE_URL,
+        ssl: {
+            rejectUnauthorized: false,
+        }
     }, {
         // Massive Configuration
         scripts: process.cwd() + '/migration',
